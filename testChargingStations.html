@@ -50,7 +50,7 @@
       
         // request all ELEC locations as geojson
         const dataRequestPromise = esriRequest({
-            url: "https://developer.nrel.gov/api/alt-fuel-stations/v1.geojson?api_key=QnhomVJEoNJdkuSwUV1Kbz9FFsE70QBzuq3pZhoi&fuel_type=ELEC&state=TX",
+            url: "https://developer.nrel.gov/api/alt-fuel-stations/v1.geojson?api_key=QnhomVJEoNJdkuSwUV1Kbz9FFsE70QBzuq3pZhoi&fuel_type=ELEC,LPG,HY,CNG,LNG&state=TX",
             handleAs: 'json'
         });
 
@@ -58,35 +58,51 @@
         var txdotLightGray = new VectorTileLayer("https://www.arcgis.com/sharing/rest/content/items/507a9905e7154ce484617c7327ee8bc4/resources/styles/root.json?f=pjson");
       	map.addLayer(txdotLightGray);
 
-        // simple marker symbol to represent locations
-        const chargeStationMarker = new SimpleMarkerSymbol("solid", 5, null, new Color([238, 69, 0, 0.5]))
-
-        map.on("load", function () {
+        map.on("load", () => {
         //  graphicslayer
         const graphicsLayer = new GraphicsLayer();
         map.addLayer(graphicsLayer);
         
         // read the geojson data from esriRequest promise
-        dataRequestPromise.then(function (response) {
+        dataRequestPromise.then((response) => {
 
             // loop through geojson and process the data
-            response.features.map(function (feature, i) {
+            response.features.map((feature, i) => {
+              const point = new Point(feature.geometry.coordinates);
 
-                const point = new Point(feature.geometry.coordinates);
-
-                // project used in SPM
+                // projection used in SPM
                 var chargeStationWebMer = webMercatorUtils.geographicToWebMercator(point);
 
+                // what else do we need? 
                 const attributes = {
                     ObjectID: i,
-                    Station_Name: feature.properties.station_name
-            };
-            const graphic = new Graphic(chargeStationWebMer, chargeStationMarker, attributes);
+                    station_name: feature.properties.station_name,
+                    fuel_type_code: feature.properties.fuel_type_code
+                };
+            
+                // give each point type a color
+                const fuelTypeColor = [
+                  {fuelTypeCode : "CNG", fuelColor : [200 ,0, 0, 0.5]},
+                  {fuelTypeCode : "LPG", fuelColor : [0 ,0, 200, 0.5]},
+                  {fuelTypeCode : "HY", fuelColor : [0,200, 0, 0.5]},
+                  {fuelTypeCode : "LNG", fuelColor : [200 ,200, 200, 0.5]},
+                  {fuelTypeCode : "ELEC", fuelColor : [232 ,221 , 19, 0.5]}
 
-            graphicsLayer.add(graphic);
+                ];
+
+                // function for symbolizing point color
+                let symbolizeAltFuels = (fuelPoint) => {
+                  if (attributes.fuel_type_code == fuelPoint.fuelTypeCode) {
+                    chargeStationMarker = new SimpleMarkerSymbol("solid", 5, null, new Color(fuelPoint.fuelColor))
+                    const graphic = new Graphic(chargeStationWebMer, chargeStationMarker, attributes);
+                    return graphicsLayer.add(graphic);
+                  }
+                }
+
+                fuelTypeColor.map(symbolizeAltFuels);      
             });
         })
-        .otherwise(function (error) {
+        .otherwise((error) => {
             console.log("error happened while loading layer", error);
         });
       });
